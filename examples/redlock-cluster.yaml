@@ -1,0 +1,13 @@
+apiVersion: redlock.example.com/v1
+kind: RedlockCluster
+metadata:
+  name: my-redlock
+  namespace: default
+spec:
+  size: 5
+  image: redis:7-alpine
+  enableFencing: true
+  lockTTL: 30000
+  persistence:
+    enabled: true
+    size: 1Gi

@@ -1,0 +1,100 @@
+name: TLA+ PR Comment
+
+on:
+  pull_request:
+    paths:
+      - '**.tla'
+      - '**.cfg'
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    name: PR Comment with Counterexample
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      - name: Download TLA+ tools
+        run: |
+          mkdir -p /tmp/tlaplus
+          curl -L -o /tmp/tlaplus/tla2tools.jar https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
+          echo "TLA_TOOLS_PATH=/tmp/tlaplus/tla2tools.jar" >> $GITHUB_ENV
+
+      - name: Run TLC and capture output
+        id: tlc
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/tlc-output
+          IFS=$'\n'
+          FAILED_MODELS=""
+          COUNTEREXAMPLES=""
+          
+          for MODEL in $(find . -name "*.tla" -type f | grep -v ".git" | sort); do
+            echo "🔍 Verifying $MODEL..."
+            CONFIG_FILE="${MODEL%.tla}.cfg"
+            OUTPUT_FILE="/tmp/tlc-output/$(basename $MODEL).log"
+            
+            if [ -f "$CONFIG_FILE" ]; then
+              java -cp $TLA_TOOLS_PATH tlc.TLC -config "$CONFIG_FILE" "$MODEL" 2>&1 | tee "$OUTPUT_FILE"
+            else
+              java -cp $TLA_TOOLS_PATH tlc.TLC "$MODEL" 2>&1 | tee "$OUTPUT_FILE"
+            fi
+            
+            if grep -q "Error:" "$OUTPUT_FILE"; then
+              FAILED_MODELS="$FAILED_MODELS\n- $MODEL"
+              
+              # Extract counterexample trace
+              COUNTEREXAMPLE=$(sed -n '/State 1/,/Error:/p' "$OUTPUT_FILE" | head -20)
+              COUNTEREXAMPLES="$COUNTEREXAMPLES\n\n## $MODEL\n\n\`\`\`\n$COUNTEREXAMPLE\n\`\`\`"
+            fi
+          done
+          
+          echo "failed_models=$FAILED_MODELS" >> $GITHUB_OUTPUT
+          echo "counterexamples=$COUNTEREXAMPLES" >> $GITHUB_OUTPUT
+          
+          if [ -n "$FAILED_MODELS" ]; then
+            exit 1
+          fi
+
+      - name: Create PR comment
+        uses: actions/github-script@v7
+        if: failure()
+        with:
+          script: |
+            const { failed_models, counterexamples } = process.env;
+            
+            const commentBody = `## ❌ TLA+ Verification Failed
+            
+The following models failed verification:
+            
+${failed_models}
+
+### Counterexamples
+
+${counterexamples}
+
+---
+
+**Next steps:**
+1. Fix the invariant violations in the model
+2. Verify locally with \`make verify-all\`
+3. Push the fix to this PR`;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: commentBody
+            });
+
+      - name: Mark as failed
+        if: failure()
+        run: |
+          echo "::error::TLA+ verification failed"
+          exit 1

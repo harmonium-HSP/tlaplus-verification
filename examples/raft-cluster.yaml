@@ -1,0 +1,13 @@
+apiVersion: raft.example.com/v1
+kind: RaftCluster
+metadata:
+  name: my-raft
+  namespace: default
+spec:
+  size: 3
+  image: etcd:3.5
+  electionTimeout: 150
+  heartbeatInterval: 100
+  persistence:
+    enabled: true
+    size: 10Gi

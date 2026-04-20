@@ -1,0 +1,11 @@
+FROM openjdk:11-jre-slim
+
+WORKDIR /app
+
+# Download TLA+ tools
+RUN apt-get update && apt-get install -y curl && \
+    curl -L -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set entrypoint
+ENTRYPOINT ["java", "-cp", "tla2tools.jar", "tlc.TLC"]

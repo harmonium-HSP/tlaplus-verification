@@ -1,0 +1,24 @@
+{
+  "warningThresholdPercent": 20,
+  "blockThresholdPercent": 50,
+  "maxRuntimeSeconds": 60,
+  "maxStates": 500000,
+  "models": {
+    "redlock_fixed": {
+      "warningThresholdPercent": 25,
+      "blockThresholdPercent": 55,
+      "maxRuntimeSeconds": 90
+    },
+    "redlock_optimized": {
+      "warningThresholdPercent": 15,
+      "blockThresholdPercent": 30,
+      "maxRuntimeSeconds": 30,
+      "maxStates": 30000
+    },
+    "lease_lock_fixed": {
+      "warningThresholdPercent": 20,
+      "blockThresholdPercent": 50,
+      "maxRuntimeSeconds": 60
+    }
+  }
+}

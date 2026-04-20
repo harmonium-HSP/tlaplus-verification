@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  redis-1:
+    image: redis:7-alpine
+    container_name: redlock-fencing-redis-1
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - redis-data-1:/data
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - redlock-network
+
+  redis-2:
+    image: redis:7-alpine
+    container_name: redlock-fencing-redis-2
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - redis-data-2:/data
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - redlock-network
+
+  redis-3:
+    image: redis:7-alpine
+    container_name: redlock-fencing-redis-3
+    ports:
+      - "6381:6379"
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - redis-data-3:/data
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - redlock-network
+
+  redis-4:
+    image: redis:7-alpine
+    container_name: redlock-fencing-redis-4
+    ports:
+      - "6382:6379"
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - redis-data-4:/data
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - redlock-network
+
+  redis-5:
+    image: redis:7-alpine
+    container_name: redlock-fencing-redis-5
+    ports:
+      - "6383:6379"
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - redis-data-5:/data
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    networks:
+      - redlock-network
+
+  chaos-proxy:
+    image: busybox:latest
+    container_name: redlock-fencing-chaos-proxy
+    privileged: true
+    networks:
+      - redlock-network
+    command: ["sleep", "infinity"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  redis-data-1:
+  redis-data-2:
+  redis-data-3:
+  redis-data-4:
+  redis-data-5:
+
+networks:
+  redlock-network:
+    driver: bridge

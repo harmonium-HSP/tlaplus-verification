@@ -1,0 +1,43 @@
+stages:
+  - verify
+
+variables:
+  TLA_TOOLS_PATH: /tmp/tlaplus/tla2tools.jar
+
+verify-models:
+  stage: verify
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache openjdk11 curl
+    - mkdir -p /tmp/tlaplus
+    - curl -L -o $TLA_TOOLS_PATH https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
+  script:
+    - |
+      set -e
+      for MODEL in $(find . -name "*.tla" -type f | grep -v ".git" | sort); do
+        echo "🔍 Verifying $MODEL..."
+        CONFIG_FILE="${MODEL%.tla}.cfg"
+        
+        if [ -f "$CONFIG_FILE" ]; then
+          java -cp $TLA_TOOLS_PATH tlc.TLC -config "$CONFIG_FILE" "$MODEL"
+        else
+          java -cp $TLA_TOOLS_PATH tlc.TLC "$MODEL"
+        fi
+        
+        if [ $? -ne 0 ]; then
+          echo "❌ Verification failed for $MODEL"
+          exit 1
+        fi
+        echo "✅ Verification passed for $MODEL"
+      done
+  artifacts:
+    paths:
+      - "*.out"
+      - "*.log"
+      - "*.te"
+    when: on_failure
+    expire_in: 7 days
+  only:
+    changes:
+      - "**.tla"
+      - "**.cfg"

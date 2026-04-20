@@ -1,0 +1,20 @@
+{
+  "redlock_optimized": {
+    "states": 14850,
+    "distinctStates": 11230,
+    "runtimeSeconds": 1.2,
+    "date": "2024-04-18"
+  },
+  "raft_election": {
+    "states": 85432,
+    "distinctStates": 62187,
+    "runtimeSeconds": 2.5,
+    "date": "2024-04-18"
+  },
+  "paxos_synod": {
+    "states": 0,
+    "distinctStates": 0,
+    "runtimeSeconds": 0,
+    "date": "2024-04-20"
+  }
+}

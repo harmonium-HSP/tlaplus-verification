@@ -1,0 +1,284 @@
+name: TLA+ Model Verification
+
+on:
+  pull_request:
+    paths:
+      - '**.tla'
+      - '**.cfg'
+      - '.github/workflows/tlaplus-verify.yml'
+      - 'model-baseline.json'
+      - 'performance-thresholds.json'
+  push:
+    branches:
+      - main
+    paths:
+      - '**.tla'
+      - '**.cfg'
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    name: TLA+ Model Check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      - name: Install tools (jq, bc)
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq bc
+
+      - name: Download TLA+ tools
+        run: |
+          mkdir -p /tmp/tlaplus
+          curl -L -o /tmp/tlaplus/tla2tools.jar https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
+          echo "TLA_TOOLS_PATH=/tmp/tlaplus/tla2tools.jar" >> $GITHUB_ENV
+
+      - name: Find TLA+ models
+        id: find_models
+        run: |
+          MODELS=$(find . -name "*.tla" -type f | grep -v ".git" | sort)
+          echo "models<<EOF" >> $GITHUB_OUTPUT
+          echo "$MODELS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Run TLC model checker
+        id: tlc
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/tlc-results
+          IFS=$'\n'
+          FAILED_MODELS=""
+          FAILED_DETAILS=""
+          ALL_PASSED="true"
+          
+          for MODEL in $(echo "${{ steps.find_models.outputs.models }}" | tr ' ' '\n'); do
+            echo "🔍 Verifying $MODEL..."
+            CONFIG_FILE="${MODEL%.tla}.cfg"
+            OUTPUT_FILE="/tmp/tlc-results/$(basename $MODEL).log"
+            
+            if [ -f "$CONFIG_FILE" ]; then
+              java -cp $TLA_TOOLS_PATH tlc.TLC -config "$CONFIG_FILE" "$MODEL" 2>&1 | tee "$OUTPUT_FILE"
+            else
+              java -cp $TLA_TOOLS_PATH tlc.TLC "$MODEL" 2>&1 | tee "$OUTPUT_FILE"
+            fi
+            
+            EXIT_CODE=${PIPESTATUS[0]}
+            if [ $EXIT_CODE -ne 0 ]; then
+              FAILED_MODELS="$FAILED_MODELS\n- $MODEL"
+              ALL_PASSED="false"
+              ERROR_LINE=$(grep -m 1 "Error:" "$OUTPUT_FILE" || echo "Unknown error")
+              FAILED_DETAILS="$FAILED_DETAILS\n$MODEL: $ERROR_LINE"
+              echo "❌ Verification failed for $MODEL"
+            else
+              echo "✅ Verification passed for $MODEL"
+            fi
+          done
+          
+          echo "all_passed=$ALL_PASSED" >> $GITHUB_OUTPUT
+          echo "failed_models=$FAILED_MODELS" >> $GITHUB_OUTPUT
+          echo "failed_details=$FAILED_DETAILS" >> $GITHUB_OUTPUT
+          
+          if [ "$ALL_PASSED" = "false" ]; then
+            exit 1
+          fi
+
+      - name: Run performance regression check
+        id: performance
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/perf-results
+          IFS=$'\n'
+          PERF_WARNING=""
+          PERF_BLOCK=""
+          PERF_DETAILS=""
+          
+          for MODEL in $(echo "${{ steps.find_models.outputs.models }}" | tr ' ' '\n'); do
+            echo "📊 Performance check for $MODEL..."
+            CONFIG_FILE="${MODEL%.tla}.cfg"
+            MODEL_NAME=$(basename "$MODEL" .tla)
+            
+            # Run performance check
+            chmod +x .github/scripts/check-performance.sh
+            OUTPUT=$(.github/scripts/check-performance.sh "$MODEL" "$CONFIG_FILE")
+            echo "$OUTPUT"
+            
+            # Parse output
+            STATES=$(echo "$OUTPUT" | grep -oP 'STATES=\K[0-9]+')
+            RUNTIME=$(echo "$OUTPUT" | grep -oP 'RUNTIME=\K[0-9]+')
+            WARNING=$(echo "$OUTPUT" | grep -oP 'WARNING=\K(?:true|false)')
+            BLOCK=$(echo "$OUTPUT" | grep -oP 'BLOCK=\K(?:true|false)')
+            MESSAGE=$(echo "$OUTPUT" | grep -oP 'MESSAGE=\K.*')
+            
+            if [ "$BLOCK" = "true" ]; then
+              PERF_BLOCK="$PERF_BLOCK\n- $MODEL_NAME: $MESSAGE"
+            elif [ "$WARNING" = "true" ]; then
+              PERF_WARNING="$PERF_WARNING\n- $MODEL_NAME: $MESSAGE"
+            fi
+            
+            PERF_DETAILS="$PERF_DETAILS\n$MODEL_NAME: States=$STATES, Runtime=${RUNTIME}s"
+          done
+          
+          echo "perf_warning=$PERF_WARNING" >> $GITHUB_OUTPUT
+          echo "perf_block=$PERF_BLOCK" >> $GITHUB_OUTPUT
+          echo "perf_details=$PERF_DETAILS" >> $GITHUB_OUTPUT
+          
+          if [ -n "$PERF_BLOCK" ]; then
+            exit 1
+          fi
+
+      - name: Upload verification logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlc-output
+          path: |
+            *.out
+            *.log
+            *.te
+          retention-days: 7
+        if: failure()
+
+      - name: Map model to responsible person
+        id: mapping
+        if: failure()
+        run: |
+          declare -A owner_map
+          owner_map["redlock_fixed.tla"]="@alice"
+          owner_map["lease_lock_fixed.tla"]="@bob"
+          owner_map["raft_election.tla"]="@charlie"
+          
+          owners=""
+          while IFS= read -r model; do
+            if [ -n "$model" ]; then
+              base=$(basename "$model" | sed 's/^- //')
+              owner="${owner_map[$base]:-@channel}"
+              if [[ ! " $owners " =~ " $owner " ]]; then
+                owners="${owners} ${owner}"
+              fi
+            fi
+          done <<< "${{ steps.tlc.outputs.failed_models }}"
+          
+          echo "owners=${owners}" >> $GITHUB_OUTPUT
+
+      - name: Send Slack notification on failure
+        if: failure() && env.SLACK_WEBHOOK_URL
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "❌ TLA+ 验证失败 ${{ steps.mapping.outputs.owners }}",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "❌ TLA+ Verification Failed",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n${{ github.repository }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Triggered by:*\n${{ github.actor }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Commit:*\n${{ github.sha }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Failed Models:*\n${{ steps.tlc.outputs.failed_models }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Counterexample Summary:*\n${{ steps.tlc.outputs.failed_details }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Performance Issues:*\n${{ steps.performance.outputs.perf_block }}\n${{ steps.performance.outputs.perf_warning }}"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Action Log",
+                        "emoji": true
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "Responsible: ${{ steps.mapping.outputs.owners }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Update Confluence
+        if: always() && env.CONFLUENCE_BASE_URL
+        env:
+          CONFLUENCE_BASE_URL: ${{ secrets.CONFLUENCE_BASE_URL }}
+          CONFLUENCE_USERNAME: ${{ secrets.CONFLUENCE_USERNAME }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          CONFLUENCE_SPACE_KEY: ${{ secrets.CONFLUENCE_SPACE_KEY }}
+        run: |
+          chmod +x .github/scripts/update-confluence.sh
+          if [ "${{ steps.tlc.outputs.all_passed }}" == "true" ]; then
+            .github/scripts/update-confluence.sh "$CONFLUENCE_SPACE_KEY" "PASS" "" ""
+          else
+            .github/scripts/update-confluence.sh "$CONFLUENCE_SPACE_KEY" "FAIL" \
+              "${{ steps.tlc.outputs.failed_models }}" \
+              "${{ steps.tlc.outputs.failed_details }}"
+          fi
+
+      - name: Update baseline on main
+        if: github.ref == 'refs/heads/main' && steps.tlc.outputs.all_passed == 'true'
+        run: |
+          chmod +x .github/scripts/update-baseline.sh
+          .github/scripts/update-baseline.sh model-baseline.json
+          
+          # Commit and push baseline update
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Actions"
+          git add model-baseline.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update performance baseline"
+          git push

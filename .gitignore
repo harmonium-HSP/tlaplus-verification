@@ -1,0 +1,60 @@
+# TLA+ temporary files
+*.out
+*.log
+*.te
+*.dot
+*.pdf
+*.bin
+.tlc/
+
+# Go build artifacts
+*.test
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+go.sum
+go.work
+go.work.sum
+redlock-fencing-demo
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Temporary directories
+tmp/
+testdata/
+/tmp/
+temp/
+*.tmp
+
+# Docker
+docker-compose.override.yml
+
+# CI/CD temporary files
+.tlc-results/
+.perf-results/
+
+# Dependencies
+vendor/
+
+# Local configuration (if sensitive)
+configs/local.yaml
+*.local.yaml
+
+# Test output
+coverage.out
+coverage.html
+
+# Generated files
+tla-gen.exe

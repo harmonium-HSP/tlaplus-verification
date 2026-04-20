@@ -6,8 +6,6 @@ on:
       - '**.tla'
       - '**.cfg'
       - '.github/workflows/tlaplus-verify.yml'
-      - 'model-baseline.json'
-      - 'performance-thresholds.json'
   push:
     branches:
       - main
@@ -30,10 +28,6 @@ jobs:
         with:
           java-version: '11'
           distribution: 'temurin'
-
-      - name: Install tools (jq, bc)
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq bc
 
       - name: Download TLA+ tools
         run: |
@@ -90,50 +84,6 @@ jobs:
           if [ "$ALL_PASSED" = "false" ]; then
             exit 1
           fi
-
-      # - name: Run performance regression check
-        # id: performance
-        # continue-on-error: true
-        # run: |
-        #   mkdir -p /tmp/perf-results
-        #   IFS=$'\n'
-        #   PERF_WARNING=""
-        #   PERF_BLOCK=""
-        #   PERF_DETAILS=""
-        #   
-        #   for MODEL in $(echo "${{ steps.find_models.outputs.models }}" | tr ' ' '\n'); do
-        #     echo "📊 Performance check for $MODEL..."
-        #     CONFIG_FILE="${MODEL%.tla}.cfg"
-        #     MODEL_NAME=$(basename "$MODEL" .tla)
-        #     
-        #     # Run performance check
-        #     chmod +x .github/scripts/check-performance.sh
-        #     OUTPUT=$(.github/scripts/check-performance.sh "$MODEL" "$CONFIG_FILE")
-        #     echo "$OUTPUT"
-        #     
-        #     # Parse output
-        #     STATES=$(echo "$OUTPUT" | grep -oP 'STATES=\K[0-9]+')
-        #     RUNTIME=$(echo "$OUTPUT" | grep -oP 'RUNTIME=\K[0-9]+')
-        #     WARNING=$(echo "$OUTPUT" | grep -oP 'WARNING=\K(?:true|false)')
-        #     BLOCK=$(echo "$OUTPUT" | grep -oP 'BLOCK=\K(?:true|false)')
-        #     MESSAGE=$(echo "$OUTPUT" | grep -oP 'MESSAGE=\K.*')
-        #     
-        #     if [ "$BLOCK" = "true" ]; then
-        #       PERF_BLOCK="$PERF_BLOCK\n- $MODEL_NAME: $MESSAGE"
-        #     elif [ "$WARNING" = "true" ]; then
-        #       PERF_WARNING="$PERF_WARNING\n- $MODEL_NAME: $MESSAGE"
-        #     fi
-        #     
-        #     PERF_DETAILS="$PERF_DETAILS\n$MODEL_NAME: States=$STATES, Runtime=${RUNTIME}s"
-        #   done
-        #   
-        #   echo "perf_warning=$PERF_WARNING" >> $GITHUB_OUTPUT
-        #   echo "perf_block=$PERF_BLOCK" >> $GITHUB_OUTPUT
-        #   echo "perf_details=$PERF_DETAILS" >> $GITHUB_OUTPUT
-        #   
-        #   if [ -n "$PERF_BLOCK" ]; then
-        #     exit 1
-        #   fi
 
       - name: Upload verification logs
         uses: actions/upload-artifact@v4

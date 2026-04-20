@@ -1,91 +1,91 @@
 ----------------------------- MODULE redlock_optimized -----------------------------
 EXTENDS Naturals, TLC, FiniteSets
 
-(* --algorithm redlock_optimized
+CONSTANTS
+  Clients, LockDuration, MaxSteps
 
-variables
-  (* 优化 1：用集合替代 5 个独立实例，但保留完整信息 *)
-  locked_by = [i \in 1..5 |-> "None"],
-  lock_token = [i \in 1..5 |-> 0],
-  lock_expire = [i \in 1..5 |-> 0];
+VARIABLES
+  locked_by,    \* [1..5 -> Clients \cup {"None"}]
+  lock_token,   \* [1..5 -> 0..MaxSteps]
+  lock_expire,  \* [1..5 -> 0..MaxSteps + LockDuration]
+  step,         \* 时间步
+  pc            \* [Clients -> {"Idle", "Acquiring", "Acquired", "Releasing"}]
 
-define
-  Majority == 3
+Majority == 3
+
+HasMajority(client) ==
+  Cardinality({i \in 1..5 : locked_by[i] = client}) >= Majority
+
+Safety ==
+  \A c1, c2 \in Clients:
+    (c1 /= c2) => ~(HasMajority(c1) /\ HasMajority(c2))
+
+TypeOK ==
+  /\ locked_by \in [1..5 -> Clients \cup {"None"}]
+  /\ lock_token \in [1..5 -> 0..MaxSteps]
+  /\ lock_expire \in [1..5 -> 0..MaxSteps + LockDuration]
+  /\ pc \in [Clients -> {"Idle", "Acquiring", "Acquired", "Releasing"}]
+
+Init ==
+  /\ locked_by = [i \in 1..5 |-> "None"]
+  /\ lock_token = [i \in 1..5 |-> 0]
+  /\ lock_expire = [i \in 1..5 |-> 0]
+  /\ step = 0
+  /\ pc = [c \in Clients |-> "Idle"]
+
+AcquireLock(client, instance) ==
+  /\ locked_by[instance] = "None" \/ lock_expire[instance] <= step
+  /\ locked_by' = [locked_by EXCEPT ![instance] = client]
+  /\ lock_token' = [lock_token EXCEPT ![instance] = step + 1]
+  /\ lock_expire' = [lock_expire EXCEPT ![instance] = step + LockDuration]
+
+ReleaseLock(client, instance) ==
+  /\ locked_by[instance] = client
+  /\ locked_by' = [locked_by EXCEPT ![instance] = "None"]
+
+Next ==
+  \/ \E client \in Clients:
+       /\ pc[client] = "Idle"
+       /\ pc' = [pc EXCEPT ![client] = "Acquiring"]
+       /\ UNCHANGED <<locked_by, lock_token, lock_expire, step>>
   
-  (* 优化 2：简化 token 有效性检查 *)
-  HasMajority(client) ==
-    Cardinality({i \in 1..5 : locked_by[i] = client}) >= Majority
+  \/ \E client \in Clients, i \in 1..5:
+       /\ pc[client] = "Acquiring"
+       /\ locked_by[i] = "None" \/ lock_expire[i] <= step
+       /\ locked_by' = [locked_by EXCEPT ![i] = client]
+       /\ lock_token' = [lock_token EXCEPT ![i] = step + 1]
+       /\ lock_expire' = [lock_expire EXCEPT ![i] = step + LockDuration]
+       /\ UNCHANGED <<pc, step>>
   
-  (* Safety：两个客户端不能同时拥有多数派 *)
-  Safety ==
-    \A c1, c2 \in Clients:
-      (c1 /= c2) => ~(HasMajority(c1) /\ HasMajority(c2))
+  \/ \E client \in Clients:
+       /\ pc[client] = "Acquiring"
+       /\ ~(\E i \in 1..5: locked_by[i] = "None" \/ lock_expire[i] <= step)
+       /\ IF HasMajority(client)
+          THEN pc' = [pc EXCEPT ![client] = "Acquired"]
+          ELSE pc' = [pc EXCEPT ![client] = "Releasing"]
+       /\ UNCHANGED <<locked_by, lock_token, lock_expire, step>>
   
-  (* 类型不变量 *)
-  TypeOK ==
-    /\ locked_by \in [1..5 -> Clients \union {"None"}]
-    /\ lock_token \in [1..5 -> 0..MaxSteps]
-    /\ lock_expire \in [1..5 -> 0..MaxSteps + LockDuration]
-end define;
+  \/ \E client \in Clients:
+       /\ pc[client] = "Acquired"
+       /\ pc' = [pc EXCEPT ![client] = "Releasing"]
+       /\ UNCHANGED <<locked_by, lock_token, lock_expire, step>>
+  
+  \/ \E client \in Clients, i \in 1..5:
+       /\ pc[client] = "Releasing"
+       /\ locked_by[i] = client
+       /\ locked_by' = [locked_by EXCEPT ![i] = "None"]
+       /\ UNCHANGED <<lock_token, lock_expire, pc, step>>
+  
+  \/ \E client \in Clients:
+       /\ pc[client] = "Releasing"
+       /\ ~(\E i \in 1..5: locked_by[i] = client)
+       /\ pc' = [pc EXCEPT ![client] = "Idle"]
+       /\ UNCHANGED <<locked_by, lock_token, lock_expire, step>>
+  
+  \/ /\ step < MaxSteps
+     /\ step' = step + 1
+     /\ UNCHANGED <<locked_by, lock_token, lock_expire, pc>>
 
-constants Clients, LockDuration, MaxSteps
-
-(* 优化 3：用事件步数替代连续时钟 *)
-variable step = 0;
-
-process Client \in Clients
-variable
-  my_name = self,
-  acquired = FALSE,
-  my_token = 0,
-  acquired_set = {};
-
-begin P:
-  while step < MaxSteps do
-    TryAcquire:
-      (* 优化 4：用步数作为 token，减少状态空间 *)
-      my_token := step + 1;
-      acquired_set := {};
-      
-      (* 尝试在所有实例上获取锁 *)
-      for i \in 1..5 do
-        if locked_by[i] = "None" \/ lock_expire[i] <= step then
-          locked_by[i] := my_name;
-          lock_token[i] := my_token;
-          lock_expire[i] := step + LockDuration;
-          acquired_set := acquired_set \cup {i};
-        end if;
-      end for;
-      
-      (* 检查是否获得多数派 *)
-      if Cardinality(acquired_set) >= Majority then
-        LockHeld:
-          skip;  (* 持有锁 *)
-        Release:
-          for i \in acquired_set do
-            if locked_by[i] = my_name then
-              locked_by[i] := "None";
-            end if;
-          end for;
-      else
-        (* 获取失败，释放部分已获取的锁 *)
-        for i \in acquired_set do
-          if locked_by[i] = my_name then
-            locked_by[i] := "None";
-          end if;
-        end for;
-      end if;
-  end while;
-end process;
-
-(* 优化 5：独立的时间步进进程 *)
-fair process StepProcess = "step"
-begin Step:
-  while step < MaxSteps do
-    step := step + 1;
-  end while;
-end process;
-
-end algorithm; *)
+Spec == Init /\ [][Next]_<<locked_by, lock_token, lock_expire, step, pc>>
 
 =============================================================================

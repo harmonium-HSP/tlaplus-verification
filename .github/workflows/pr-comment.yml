@@ -31,7 +31,6 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p /tmp/tlc-output
-          IFS=$'\n'
           FAILED_MODELS=""
           COUNTEREXAMPLES=""
           
@@ -49,14 +48,18 @@ jobs:
             if grep -q "Error:" "$OUTPUT_FILE"; then
               FAILED_MODELS="$FAILED_MODELS\n- $MODEL"
               
-              # Extract counterexample trace
               COUNTEREXAMPLE=$(sed -n '/State 1/,/Error:/p' "$OUTPUT_FILE" | head -20)
-              COUNTEREXAMPLES="$COUNTEREXAMPLES\n\n## $MODEL\n\n\`\`\`\n$COUNTEREXAMPLE\n\`\`\`"
+              COUNTEREXAMPLES="$COUNTEREXAMPLES\n\n## $MODEL\n\n```\n$COUNTEREXAMPLE\n```"
             fi
           done
           
-          echo "failed_models=$FAILED_MODELS" >> $GITHUB_OUTPUT
-          echo "counterexamples=$COUNTEREXAMPLES" >> $GITHUB_OUTPUT
+          echo "failed_models<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FAILED_MODELS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "counterexamples<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$COUNTEREXAMPLES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
           
           if [ -n "$FAILED_MODELS" ]; then
             exit 1
@@ -65,27 +68,16 @@ jobs:
       - name: Create PR comment
         uses: actions/github-script@v7
         if: failure()
+        env:
+          FAILED_MODELS: ${{ steps.tlc.outputs.failed_models }}
+          COUNTEREXAMPLES: ${{ steps.tlc.outputs.counterexamples }}
         with:
           script: |
-            const { failed_models, counterexamples } = process.env;
+            const failedModels = process.env.FAILED_MODELS || 'No models listed';
+            const counterexamples = process.env.COUNTEREXAMPLES || 'No counterexamples available';
             
-            const commentBody = `## ❌ TLA+ Verification Failed
+            const commentBody = `## ❌ TLA+ Verification Failed\n\nThe following models failed verification:\n\n${failedModels}\n\n### Counterexamples\n\n${counterexamples}\n\n---\n\n**Next steps:**\n1. Fix the invariant violations in the model\n2. Verify locally with \`make verify-all\`\n3. Push the fix to this PR`;
             
-The following models failed verification:
-            
-${failed_models}
-
-### Counterexamples
-
-${counterexamples}
-
----
-
-**Next steps:**
-1. Fix the invariant violations in the model
-2. Verify locally with \`make verify-all\`
-3. Push the fix to this PR`;
-
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,

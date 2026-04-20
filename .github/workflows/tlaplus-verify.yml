@@ -145,113 +145,114 @@ jobs:
           retention-days: 7
         if: failure()
 
-      - name: Map model to responsible person
-        id: mapping
-        if: failure()
-        run: |
-          declare -A owner_map
-          owner_map["redlock_fixed.tla"]="@alice"
-          owner_map["lease_lock_fixed.tla"]="@bob"
-          owner_map["raft_election.tla"]="@charlie"
-          
-          owners=""
-          while IFS= read -r model; do
-            if [ -n "$model" ]; then
-              base=$(basename "$model" | sed 's/^- //')
-              owner="${owner_map[$base]:-@channel}"
-              if [[ ! " $owners " =~ " $owner " ]]; then
-                owners="${owners} ${owner}"
-              fi
-            fi
-          done <<< "${{ steps.tlc.outputs.failed_models }}"
-          
-          echo "owners=${owners}" >> $GITHUB_OUTPUT
+      # - name: Map model to responsible person
+        # id: mapping
+        # if: failure()
+        # run: |
+        #   declare -A owner_map
+        #   owner_map["redlock_fixed.tla"]="@alice"
+        #   owner_map["lease_lock_fixed.tla"]="@bob"
+        #   owner_map["raft_election.tla"]="@charlie"
+        #   
+        #   owners=""
+        #   while IFS= read -r model; do
+        #     if [ -n "$model" ]; then
+        #       base=$(basename "$model" | sed 's/^- //')
+        #       owner="${owner_map[$base]:-@channel}"
+        #       if [[ ! " $owners " =~ " $owner " ]]; then
+        #         owners="${owners} ${owner}"
+        #       fi
+        #     fi
+        #   done <<< "${{ steps.tlc.outputs.failed_models }}"
+        #   
+        #   echo "owners=${owners}" >> $GITHUB_OUTPUT
 
-      - name: Send Slack notification on failure
-        if: failure() && env.SLACK_WEBHOOK_URL
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          payload: |
-            {
-              "text": "❌ TLA+ 验证失败 ${{ steps.mapping.outputs.owners }}",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "❌ TLA+ Verification Failed",
-                    "emoji": true
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Repository:*\n${{ github.repository }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Triggered by:*\n${{ github.actor }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Branch:*\n${{ github.ref_name }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Commit:*\n${{ github.sha }}"
-                    }
-                  ]
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Failed Models:*\n${{ steps.tlc.outputs.failed_models }}"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Counterexample Summary:*\n${{ steps.tlc.outputs.failed_details }}"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Performance Issues:*\n${{ steps.performance.outputs.perf_block }}\n${{ steps.performance.outputs.perf_warning }}"
-                  }
-                },
-                {
-                  "type": "actions",
-                  "elements": [
-                    {
-                      "type": "button",
-                      "text": {
-                        "type": "plain_text",
-                        "text": "View Action Log",
-                        "emoji": true
-                      },
-                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                    }
-                  ]
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "Responsible: ${{ steps.mapping.outputs.owners }}"
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      # - name: Send Slack notification on failure
+        # if: failure() && env.SLACK_WEBHOOK_URL
+        # uses: slackapi/slack-github-action@v1.24.0
+        # with:
+        #   webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        #   payload: |
+        #     {
+        #       "text": "❌ TLA+ 验证失败 ${{ steps.mapping.outputs.owners }}",
+        #       "blocks": [
+        #         {
+        #           "type": "header",
+        #           "text": {
+        #             "type": "plain_text",
+        #             "text": "❌ TLA+ Verification Failed",
+        #             "emoji": true
+        #           }
+        #         },
+        #         {
+        #           "type": "section",
+        #           "fields": [
+        #             {
+        #               "type": "mrkdwn",
+        #               "text": "*Repository:*\n${{ github.repository }}"
+        #             },
+        #             {
+        #               "type": "mrkdwn",
+        #               "text": "*Triggered by:*\n${{ github.actor }}"
+        #             },
+        #             {
+        #               "type": "mrkdwn",
+        #               "text": "*Branch:*\n${{ github.ref_name }}"
+        #             },
+        #             {
+        #               "type": "mrkdwn",
+        #               "text": "*Commit:*\n${{ github.sha }}"
+        #             }
+        #           ]
+        #         },
+        #         {
+        #           "type": "section",
+        #           "text": {
+        #             "type": "mrkdwn",
+        #             "text": "*Failed Models:*\n${{ steps.tlc.outputs.failed_models }}"
+        #           }
+        #         },
+        #         {
+        #           "type": "section",
+        #           "text": {
+        #             "type": "mrkdwn",
+        #             "text": "*Counterexample Summary:*\n${{ steps.tlc.outputs.failed_details }}"
+        #           }
+        #         },
+        #         {
+        #           "type": "section",
+        #           "text": {
+        #             "type": "mrkdwn",
+        #             "text": "*Performance Issues:*\n${{ steps.performance.outputs.perf_block }}\n${{ steps.performance.outputs.perf_warning }}"
+        #           }
+        #         },
+        #         {
+        #           "type": "actions",
+        #           "elements": [
+        #             {
+        #               "type": "button",
+        #               "text": {
+        #                 "type": "plain_text",
+        #                 "text": "View Action Log",
+        #                 "emoji": true
+        #               },
+        #               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        #             }
+        #           ]
+        #         },
+        #         {
+        #           "type": "context",
+        #           "elements": [
+        #             {
+        #               "type": "mrkdwn",
+        #               "text": "Responsible: ${{ steps.mapping.outputs.owners }}"
+        #             }
+        #           ]
+        #         }
+        #       ]
+        #     }
+        # env:
+        #   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Update Confluence
         if: always() && env.CONFLUENCE_BASE_URL

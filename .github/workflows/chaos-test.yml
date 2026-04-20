@@ -70,29 +70,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Send Slack notification on failure
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "❌ Redlock Chaos Tests Failed",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Redlock Chaos Tests Failed* :rotating_light:\n\nWorkflow: `${{ github.workflow }}`\nRun: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>\nBranch: `${{ github.ref_name }}`\nCommit: `${{ github.sha }}`"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "`@engineering-team` Please investigate the test failures."
-                  }
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      # - name: Send Slack notification on failure
+        # uses: slackapi/slack-github-action@v1.24.0
+        # with:
+        #   payload: |
+        #     {
+        #       "text": "❌ Redlock Chaos Tests Failed",
+        #       "blocks": [
+        #         {
+        #           "type": "section",
+        #           "text": {
+        #             "type": "mrkdwn",
+        #             "text": "*Redlock Chaos Tests Failed* :rotating_light:\n\nWorkflow: `${{ github.workflow }}`\nRun: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Details>\nBranch: `${{ github.ref_name }}`\nCommit: `${{ github.sha }}`"
+        #           }
+        #         },
+        #         {
+        #           "type": "section",
+        #           "text": {
+        #             "type": "mrkdwn",
+        #             "text": "`@engineering-team` Please investigate the test failures."
+        #           }
+        #         }
+        #       ]
+        #     }
+        # env:
+        #   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

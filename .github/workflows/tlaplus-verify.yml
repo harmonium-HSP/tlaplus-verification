@@ -65,9 +65,9 @@ jobs:
             OUTPUT_FILE="/tmp/tlc-results/$(basename $MODEL).log"
             
             if [ -f "$CONFIG_FILE" ]; then
-              java -cp $TLA_TOOLS_PATH tlc.TLC -config "$CONFIG_FILE" "$MODEL" 2>&1 | tee "$OUTPUT_FILE"
+              java -cp $TLA_TOOLS_PATH tlc2.TLC -config "$CONFIG_FILE" "$MODEL" 2>&1 | tee "$OUTPUT_FILE"
             else
-              java -cp $TLA_TOOLS_PATH tlc.TLC "$MODEL" 2>&1 | tee "$OUTPUT_FILE"
+              java -cp $TLA_TOOLS_PATH tlc2.TLC "$MODEL" 2>&1 | tee "$OUTPUT_FILE"
             fi
             
             EXIT_CODE=${PIPESTATUS[0]}

@@ -57,7 +57,7 @@ jobs:
           wget -q https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
 
       - name: Run TLA+ verification
-        run: java -cp tla2tools.jar tlc.TLC -config models/redlock/redlock_optimized.cfg models/redlock/redlock_optimized.tla
+        run: java -cp tla2tools.jar tlc2.TLC -config models/redlock/redlock_optimized.cfg models/redlock/redlock_optimized.tla
 
       - name: Performance regression check
         run: .github/scripts/check-performance.sh

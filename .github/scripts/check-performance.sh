@@ -25,21 +25,21 @@ if [ ! -f "$BASELINE_FILE" ]; then
     exit 0
 fi
 
-# Get baseline values
-BASELINE_STATES=$(jq -r ".${MODEL_NAME}.states // 0" "$BASELINE_FILE")
-BASELINE_DISTINCT=$(jq -r ".${MODEL_NAME}.distinctStates // 0" "$BASELINE_FILE")
-BASELINE_RUNTIME=$(jq -r ".${MODEL_NAME}.runtimeSeconds // 0" "$BASELINE_FILE")
+# Get baseline values using jq --arg for proper variable handling
+BASELINE_STATES=$(jq -r --arg name "$MODEL_NAME" '.[$name].states // 0' "$BASELINE_FILE")
+BASELINE_DISTINCT=$(jq -r --arg name "$MODEL_NAME" '.[$name].distinctStates // 0' "$BASELINE_FILE")
+BASELINE_RUNTIME=$(jq -r --arg name "$MODEL_NAME" '.[$name].runtimeSeconds // 0' "$BASELINE_FILE")
 
 # Get thresholds
-DEFAULT_WARNING=$(jq -r ".warningThresholdPercent // 20" "$THRESHOLDS_FILE")
-DEFAULT_BLOCK=$(jq -r ".blockThresholdPercent // 50" "$THRESHOLDS_FILE")
-DEFAULT_MAX_RUNTIME=$(jq -r ".maxRuntimeSeconds // 60" "$THRESHOLDS_FILE")
-DEFAULT_MAX_STATES=$(jq -r ".maxStates // 500000" "$THRESHOLDS_FILE")
+DEFAULT_WARNING=$(jq -r ".warningThresholdPercent // 20" "$THRESHOLDS_FILE" 2>/dev/null || echo "20")
+DEFAULT_BLOCK=$(jq -r ".blockThresholdPercent // 50" "$THRESHOLDS_FILE" 2>/dev/null || echo "50")
+DEFAULT_MAX_RUNTIME=$(jq -r ".maxRuntimeSeconds // 60" "$THRESHOLDS_FILE" 2>/dev/null || echo "60")
+DEFAULT_MAX_STATES=$(jq -r ".maxStates // 500000" "$THRESHOLDS_FILE" 2>/dev/null || echo "500000")
 
 # Model-specific thresholds (override defaults)
-MODEL_WARNING=$(jq -r ".models.${MODEL_NAME}.warningThresholdPercent // $DEFAULT_WARNING" "$THRESHOLDS_FILE")
-MODEL_BLOCK=$(jq -r ".models.${MODEL_NAME}.blockThresholdPercent // $DEFAULT_BLOCK" "$THRESHOLDS_FILE")
-MODEL_MAX_RUNTIME=$(jq -r ".models.${MODEL_NAME}.maxRuntimeSeconds // $DEFAULT_MAX_RUNTIME" "$THRESHOLDS_FILE")
+MODEL_WARNING=$(jq -r --arg name "$MODEL_NAME" ".models[\$name].warningThresholdPercent // $DEFAULT_WARNING" "$THRESHOLDS_FILE" 2>/dev/null || echo "$DEFAULT_WARNING")
+MODEL_BLOCK=$(jq -r --arg name "$MODEL_NAME" ".models[\$name].blockThresholdPercent // $DEFAULT_BLOCK" "$THRESHOLDS_FILE" 2>/dev/null || echo "$DEFAULT_BLOCK")
+MODEL_MAX_RUNTIME=$(jq -r --arg name "$MODEL_NAME" ".models[\$name].maxRuntimeSeconds // $DEFAULT_MAX_RUNTIME" "$THRESHOLDS_FILE" 2>/dev/null || echo "$DEFAULT_MAX_RUNTIME")
 
 # Run TLC and capture output
 echo "🔍 Running performance check for $MODEL_NAME..."
